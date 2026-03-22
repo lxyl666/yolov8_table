@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>桌面小物件识别系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        .content {
+            padding: 40px;
+        }
+        .upload-section {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .upload-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        .upload-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .file-input {
+            display: none;
+        }
+        .preview-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+        .preview-box {
+            background: #f5f7fa;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+        }
+        .preview-box h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .preview-img {
+            max-width: 100%;
+            max-height: 500px;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            display: block;
+            margin: 0 auto;
+        }
+        /* 高亮Canvas，和图片完全重叠 */
+        .highlight-canvas {
+            position: absolute;
+            top: 58px; /* 标题高度+内边距 */
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 10px;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .result-section {
+            background: #f5f7fa;
+            border-radius: 15px;
+            padding: 30px;
+        }
+        .result-section h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+        .detection-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .detection-item {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+            border-left: 4px solid #667eea;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .detection-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        }
+        .detection-item.selected {
+            border-left: 4px solid #764ba2;
+            background: linear-gradient(135deg, #f0f4ff 0%, #e8f0ff 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.2);
+        }
+        .detection-item .class-name {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .detection-item .confidence {
+            font-size: 14px;
+            color: #666;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+            font-size: 16px;
+        }
+        .loading.active {
+            display: block;
+        }
+        .tip-text {
+            color: #999;
+            font-size: 14px;
+            margin-top: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🖥️ 桌面小物件识别系统</h1>
+            <p>基于YOLOv8的Web端目标检测 | 点击检测项可高亮目标</p>
+        </div>
+        <div class="content">
+            <div class="upload-section">
+                <input type="file" id="fileInput" class="file-input" accept="image/*">
+                <button class="upload-btn" id="uploadBtn">📷 选择图片并检测</button>
+            </div>
+
+            <div class="loading" id="loading">
+                🔄 正在检测中，请稍候...
+            </div>
+
+            <div class="preview-section" id="previewSection" style="display: none;">
+                <div class="preview-box">
+                    <h3>原图</h3>
+                    <img id="originalImg" class="preview-img">
+                </div>
+                <div class="preview-box">
+                    <h3>检测结果</h3>
+                    <img id="resultImg" class="preview-img">
+                    <!-- 高亮Canvas -->
+                    <canvas id="highlightCanvas" class="highlight-canvas"></canvas>
+                </div>
+            </div>
+
+            <div class="result-section" id="resultSection" style="display: none;">
+                <h3>📊 检测详情（点击可高亮目标）</h3>
+                <div class="detection-list" id="detectionList"></div>
+                <p class="tip-text">💡 点击上方检测项，可在右侧结果图中高亮对应目标</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "";
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const loading = document.getElementById('loading');
+        const previewSection = document.getElementById('previewSection');
+        const resultSection = document.getElementById('resultSection');
+        const originalImg = document.getElementById('originalImg');
+        const resultImg = document.getElementById('resultImg');
+        const highlightCanvas = document.getElementById('highlightCanvas');
+        const detectionList = document.getElementById('detectionList');
+
+        // 全局状态
+        let currentDetections = [];
+        let selectedIndex = -1;
+        // 【核心新增】图片缩放参数
+        let imageScale = 1;
+        let imageOffsetX = 0;
+        let imageOffsetY = 0;
+
+        // 点击按钮触发文件选择
+        uploadBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // 选择文件后自动检测
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // 重置状态
+            selectedIndex = -1;
+            currentDetections = [];
+
+            // 显示原图
+            originalImg.src = URL.createObjectURL(file);
+
+            // 显示加载中
+            loading.classList.add('active');
+            uploadBtn.disabled = true;
+            previewSection.style.display = 'none';
+            resultSection.style.display = 'none';
+
+            try {
+                // 调用API检测
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch(`${API_URL}/detect/image`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // 保存检测结果
+                    currentDetections = data.detections;
+
+                    // 加载结果图片
+                    resultImg.onload = () => {
+                        // 图片加载完成后，初始化Canvas和坐标转换
+                        initHighlightCanvas();
+                        drawAllDetections();
+                    };
+                    resultImg.src = `${API_URL}${data.result_image_url}`;
+
+                    previewSection.style.display = 'grid';
+                    resultSection.style.display = 'block';
+
+                    // 渲染检测列表
+                    renderDetectionList();
+                } else {
+                    alert('检测失败，请重试');
+                }
+            } catch (error) {
+                console.error(error);
+                alert('网络错误，请确保后端服务已启动');
+            } finally {
+                loading.classList.remove('active');
+                uploadBtn.disabled = false;
+            }
+        });
+
+        // 【核心修复】初始化Canvas，计算图片缩放比例
+        function initHighlightCanvas() {
+            // 获取图片的实际显示尺寸
+            const displayWidth = resultImg.offsetWidth;
+            const displayHeight = resultImg.offsetHeight;
+            // 获取图片的原始像素尺寸
+            const naturalWidth = resultImg.naturalWidth;
+            const naturalHeight = resultImg.naturalHeight;
+
+            // 计算缩放比例（原图 -> 显示尺寸的缩放）
+            imageScale = Math.min(displayWidth / naturalWidth, displayHeight / naturalHeight);
+            // 计算图片居中后的偏移
+            imageOffsetX = (displayWidth - naturalWidth * imageScale) / 2;
+            imageOffsetY = (displayHeight - naturalHeight * imageScale) / 2;
+
+            // 设置Canvas尺寸和显示的图片完全一致
+            highlightCanvas.width = displayWidth;
+            highlightCanvas.height = displayHeight;
+            highlightCanvas.style.width = displayWidth + 'px';
+            highlightCanvas.style.height = displayHeight + 'px';
+        }
+
+        // 【核心修复】把原图坐标转换成Canvas显示坐标
+        function convertCoord(originalX, originalY) {
+            return {
+                x: originalX * imageScale + imageOffsetX,
+                y: originalY * imageScale + imageOffsetY
+            };
+        }
+
+        // 【修复】绘制所有检测框（默认状态）
+        function drawAllDetections() {
+            const ctx = highlightCanvas.getContext('2d');
+            ctx.clearRect(0, 0, highlightCanvas.width, highlightCanvas.height);
+
+            // 绘制半透明遮罩
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(0, 0, highlightCanvas.width, highlightCanvas.height);
+
+            // 把所有检测框区域挖空（显示原图）
+            currentDetections.forEach((det) => {
+                const [x1, y1, x2, y2] = det.bbox;
+                // 转换坐标
+                const start = convertCoord(x1, y1);
+                const end = convertCoord(x2, y2);
+                const width = end.x - start.x;
+                const height = end.y - start.y;
+
+                ctx.clearRect(start.x, start.y, width, height);
+            });
+        }
+
+        // 【修复】高亮单个目标
+        function highlightDetection(index) {
+            const ctx = highlightCanvas.getContext('2d');
+            ctx.clearRect(0, 0, highlightCanvas.width, highlightCanvas.height);
+
+            if (index < 0 || index >= currentDetections.length) {
+                drawAllDetections();
+                return;
+            }
+
+            const det = currentDetections[index];
+            const [x1, y1, x2, y2] = det.bbox;
+            // 转换坐标
+            const start = convertCoord(x1, y1);
+            const end = convertCoord(x2, y2);
+            const width = end.x - start.x;
+            const height = end.y - start.y;
+
+            // 1. 绘制半透明遮罩
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, highlightCanvas.width, highlightCanvas.height);
+
+            // 2. 挖空选中的目标区域
+            ctx.clearRect(start.x - 10, start.y - 10, width + 20, height + 20);
+
+            // 3. 绘制高亮边框
+            const colors = [
+                '#FF5722', // key
+                '#4CAF50', // usb_disk
+                '#2196F3', // scissors
+                '#FFC107', // paperclip
+                '#E91E63'  // earring
+            ];
+            ctx.strokeStyle = colors[det.class_id] || '#667eea';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(start.x, start.y, width, height);
+
+            // 4. 绘制角点
+            ctx.fillStyle = colors[det.class_id] || '#667eea';
+            const cornerRadius = 10;
+            ctx.beginPath();
+            ctx.arc(start.x, start.y, cornerRadius, 0, Math.PI * 2);
+            ctx.arc(end.x, start.y, cornerRadius, 0, Math.PI * 2);
+            ctx.arc(start.x, end.y, cornerRadius, 0, Math.PI * 2);
+            ctx.arc(end.x, end.y, cornerRadius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 渲染检测列表
+        function renderDetectionList() {
+            detectionList.innerHTML = '';
+            currentDetections.forEach((det, index) => {
+                const item = document.createElement('div');
+                item.className = 'detection-item';
+                item.innerHTML = `
+                    <div class="class-name">${getChineseName(det.class_name)}</div>
+                    <div class="confidence">置信度: ${(det.confidence * 100).toFixed(1)}%</div>
+                `;
+
+                // 点击事件
+                item.addEventListener('click', () => {
+                    // 移除之前选中的样式
+                    document.querySelectorAll('.detection-item').forEach(el => el.classList.remove('selected'));
+                    // 添加当前选中的样式
+                    item.classList.add('selected');
+                    // 高亮目标
+                    selectedIndex = index;
+                    highlightDetection(index);
+                });
+
+                detectionList.appendChild(item);
+            });
+        }
+
+        // 英文类别转中文
+        function getChineseName(englishName) {
+            const map = {
+                'key': '🔑 钥匙',
+                'usb_disk': '💾 U盘',
+                'scissors': '✂️ 剪刀',
+                'paperclip': '📎 回形针',
+                'earring': '💍 耳环'
+            };
+            return map[englishName] || englishName;
+        }
+
+        // 窗口大小变化时，重新调整Canvas
+        window.addEventListener('resize', () => {
+            if (resultImg.src) {
+                initHighlightCanvas();
+                if (selectedIndex >= 0) {
+                    highlightDetection(selectedIndex);
+                } else {
+                    drawAllDetections();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
